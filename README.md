@@ -1,6 +1,6 @@
 # Wallet Service with Paystack, JWT & API Keys
 
-A production-ready backend wallet service built with FastAPI, PostgreSQL, and Paystack integration.
+A backend wallet service built with FastAPI, PostgreSQL, and Paystack integration.
 
 ## Features
 
