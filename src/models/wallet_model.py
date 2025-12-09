@@ -26,7 +26,7 @@ class Wallet(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
     wallet_number = Column(
-        String(13),
+        String(15),
         unique=True,
         nullable=False,
         index=True,
