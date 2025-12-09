@@ -1,0 +1,12 @@
+fastapi[standard]
+uvicorn
+sqlalchemy
+asyncpg
+pydantic
+pydantic-settings
+python-dotenv
+pyjwt
+httpx
+authlib
+itsdangerous
+python-multipart
