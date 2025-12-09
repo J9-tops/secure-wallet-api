@@ -10,7 +10,7 @@ A production-ready backend wallet service built with FastAPI, PostgreSQL, and Pa
 ✅ **Wallet Operations** - Deposits, transfers, balance checks  
 ✅ **Transaction History** - Complete audit trail  
 ✅ **Security Features** - Signature verification, permission-based access  
-✅ **Idempotent Operations** - Safe webhook processing  
+✅ **Idempotent Operations** - Safe webhook processing
 
 ## Project Structure
 
@@ -50,30 +50,30 @@ src/
 ### 1. Clone and Setup
 
 ```bash
-# Create virtual environment
+
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+
 pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment
 
 ```bash
-# Copy example env file
+
 cp .env.example .env
 
-# Edit .env with your credentials
+
 ```
 
 ### 3. Setup PostgreSQL
 
 ```bash
-# Create database
+
 createdb wallet_service
 
-# Or using psql
+
 psql -U postgres
 CREATE DATABASE wallet_service;
 ```
@@ -97,16 +97,17 @@ CREATE DATABASE wallet_service;
 ### 6. Run Application
 
 ```bash
-# Initialize database (first time only)
+
 python -c "from src.db.session import init_db; import asyncio; asyncio.run(init_db())"
 
-# Start server
+
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## API Documentation
 
 Once running, access interactive docs at:
+
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
@@ -114,28 +115,28 @@ Once running, access interactive docs at:
 
 ### Authentication
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/auth/google` | Initiate Google sign-in |
-| GET | `/auth/google/callback` | OAuth callback (returns JWT) |
+| Method | Endpoint                | Description                  |
+| ------ | ----------------------- | ---------------------------- |
+| GET    | `/auth/google`          | Initiate Google sign-in      |
+| GET    | `/auth/google/callback` | OAuth callback (returns JWT) |
 
 ### API Key Management
 
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| POST | `/keys/create` | Create API key | JWT |
-| POST | `/keys/rollover` | Rollover expired key | JWT |
+| Method | Endpoint         | Description          | Auth |
+| ------ | ---------------- | -------------------- | ---- |
+| POST   | `/keys/create`   | Create API key       | JWT  |
+| POST   | `/keys/rollover` | Rollover expired key | JWT  |
 
 ### Wallet Operations
 
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| POST | `/wallet/deposit` | Initiate deposit | JWT or API Key (deposit) |
-| POST | `/wallet/paystack/webhook` | Paystack webhook | Paystack signature |
-| GET | `/wallet/deposit/{ref}/status` | Check deposit status | JWT or API Key (read) |
-| GET | `/wallet/balance` | Get balance | JWT or API Key (read) |
-| POST | `/wallet/transfer` | Transfer funds | JWT or API Key (transfer) |
-| GET | `/wallet/transactions` | Transaction history | JWT or API Key (read) |
+| Method | Endpoint                       | Description          | Auth                      |
+| ------ | ------------------------------ | -------------------- | ------------------------- |
+| POST   | `/wallet/deposit`              | Initiate deposit     | JWT or API Key (deposit)  |
+| POST   | `/wallet/paystack/webhook`     | Paystack webhook     | Paystack signature        |
+| GET    | `/wallet/deposit/{ref}/status` | Check deposit status | JWT or API Key (read)     |
+| GET    | `/wallet/balance`              | Get balance          | JWT or API Key (read)     |
+| POST   | `/wallet/transfer`             | Transfer funds       | JWT or API Key (transfer) |
+| GET    | `/wallet/transactions`         | Transaction history  | JWT or API Key (read)     |
 
 ## Usage Examples
 
@@ -145,7 +146,7 @@ Once running, access interactive docs at:
 # Step 1: Open in browser
 http://localhost:8000/auth/google
 
-# Step 2: After OAuth, you'll receive:
+
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "token_type": "bearer"
@@ -262,11 +263,13 @@ curl -X GET http://localhost:8000/wallet/transactions \
 ## Security Features
 
 ### JWT Authentication
+
 - Tokens expire after 24 hours
 - HS256 algorithm
 - Includes user_id and email claims
 
 ### API Key Security
+
 - SHA-256 hashed storage
 - Permission-based access control
 - Maximum 5 active keys per user
@@ -274,11 +277,13 @@ curl -X GET http://localhost:8000/wallet/transactions \
 - Revocation support
 
 ### Paystack Webhook Verification
+
 - HMAC SHA-512 signature verification
 - Idempotent processing (no double-credit)
 - Amount validation
 
 ### Transfer Security
+
 - Balance verification
 - Atomic transactions
 - Self-transfer prevention
@@ -287,6 +292,7 @@ curl -X GET http://localhost:8000/wallet/transactions \
 ## Database Schema
 
 ### Users Table
+
 - id (UUID, PK)
 - email (unique)
 - google_id (unique)
@@ -295,6 +301,7 @@ curl -X GET http://localhost:8000/wallet/transactions \
 - timestamps
 
 ### Wallets Table
+
 - id (UUID, PK)
 - user_id (FK, unique)
 - wallet_number (13 digits, unique)
@@ -302,6 +309,7 @@ curl -X GET http://localhost:8000/wallet/transactions \
 - timestamps
 
 ### Transactions Table
+
 - id (UUID, PK)
 - user_id (FK)
 - reference (unique)
@@ -313,6 +321,7 @@ curl -X GET http://localhost:8000/wallet/transactions \
 - timestamps
 
 ### API Keys Table
+
 - id (UUID, PK)
 - user_id (FK)
 - name
@@ -347,55 +356,3 @@ All endpoints return appropriate HTTP status codes:
 - `403 Forbidden` - Insufficient permissions
 - `404 Not Found` - Resource not found
 - `500 Internal Server Error` - Server error
-
-## Production Deployment
-
-### Environment Variables
-- Set strong `JWT_SECRET`
-- Use production Paystack keys
-- Configure proper `DATABASE_URL`
-- Set `DEBUG=False`
-
-### Database
-- Use connection pooling
-- Enable SSL for PostgreSQL
-- Regular backups
-
-### Security
-- Use HTTPS only
-- Configure CORS properly
-- Rate limiting
-- Monitor webhook attempts
-
-### Monitoring
-- Log all transactions
-- Alert on failed webhooks
-- Track API key usage
-
-## Troubleshooting
-
-### Database Connection Issues
-```bash
-# Check PostgreSQL is running
-pg_isready
-
-# Test connection
-psql -U postgres -d wallet_service
-```
-
-### OAuth Redirect Issues
-- Ensure redirect URI matches exactly in Google Console
-- Check `GOOGLE_REDIRECT_URI` in `.env`
-
-### Webhook Not Receiving Events
-- Verify webhook URL is publicly accessible
-- Check Paystack dashboard for delivery logs
-- Verify signature validation
-
-## License
-
-MIT
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
