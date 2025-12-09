@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     """Initialize database on startup"""
     logger.info("Starting up wallet service...")
     try:
-        await init_db()
+        init_db()
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}", exc_info=True)
@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down wallet service...")
     try:
-        await close_db()
+        close_db()
         logger.info("Database connections closed")
     except Exception as e:
         logger.error(f"Error closing database: {str(e)}", exc_info=True)
