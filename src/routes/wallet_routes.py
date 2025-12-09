@@ -30,7 +30,7 @@ async def initiate_deposit(
     Requires: JWT or API key with 'deposit' permission
     """
     try:
-        result = await wallet_service.initiate_deposit(
+        result = wallet_service.initiate_deposit(
             db=db, user=current_user, amount=request.amount
         )
 
@@ -73,7 +73,7 @@ async def paystack_webhook(
     try:
         body = await request.body()
 
-        await webhook_service.process_paystack_webhook(
+        webhook_service.process_paystack_webhook(
             db=db, body=body, signature=x_paystack_signature
         )
 
@@ -114,7 +114,7 @@ async def get_deposit_status(
     Requires: JWT or API key with 'read' permission
     """
     try:
-        result = await wallet_service.get_deposit_status(
+        result = wallet_service.get_deposit_status(
             db=db, reference=reference, user=current_user
         )
         return (result,)
@@ -149,7 +149,7 @@ async def get_balance(
     Requires: JWT or API key with 'read' permission
     """
     try:
-        balance = await wallet_service.get_balance(db=db, user=current_user)
+        balance = wallet_service.get_balance(db=db, user=current_user)
         return ({"balance": balance},)
 
     except Exception as e:
@@ -174,7 +174,7 @@ async def transfer_funds(
     Requires: JWT or API key with 'transfer' permission
     """
     try:
-        result = await wallet_service.transfer_funds(
+        result = wallet_service.transfer_funds(
             db=db,
             sender=current_user,
             recipient_wallet_number=request.wallet_number,
@@ -220,7 +220,7 @@ async def get_transactions(
     Requires: JWT or API key with 'read' permission
     """
     try:
-        transactions = await wallet_service.get_transactions(db=db, user=current_user)
+        transactions = wallet_service.get_transactions(db=db, user=current_user)
         data_list = [TransactionResponse.from_orm(t) for t in transactions]
 
         return ({"transactions": data_list, "count": len(data_list)},)

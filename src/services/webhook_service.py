@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from src.models.transaction_model import Transaction, TransactionStatus
 from src.models.wallet_model import Wallet
@@ -20,26 +20,9 @@ logger = logging.getLogger(__name__)
 class WebhookService:
     """Service for processing Paystack webhooks"""
 
-    async def process_paystack_webhook(
-        self, db: AsyncSession, body: bytes, signature: str
+    def process_paystack_webhook(
+        self, db: Session, body: bytes, signature: str
     ) -> bool:
-        """
-        Process Paystack webhook with signature verification
-        This is the ONLY method that credits wallets
-
-        Args:
-            db: Database session
-            body: Raw request body
-            signature: Paystack signature header
-
-        Returns:
-            True if processed successfully
-
-        Raises:
-            ValueError: If signature is invalid or data is malformed
-            LookupError: If transaction not found
-        """
-        # Verify signature
         if not signature:
             raise ValueError("Missing Paystack signature")
 
@@ -61,7 +44,7 @@ class WebhookService:
         if not reference or not amount_in_kobo:
             raise ValueError("Missing required webhook data")
 
-        processed = await self._process_deposit(
+        processed = self._process_deposit(
             db=db,
             reference=reference,
             amount_in_kobo=amount_in_kobo,
@@ -70,31 +53,14 @@ class WebhookService:
 
         return processed
 
-    async def _process_deposit(
+    def _process_deposit(
         self,
-        db: AsyncSession,
+        db: Session,
         reference: str,
         amount_in_kobo: int,
         paystack_status: str,
     ) -> bool:
-        """
-        Process deposit and credit wallet (ATOMIC operation)
-
-        Args:
-            db: Database session
-            reference: Transaction reference
-            amount_in_kobo: Amount in kobo (smallest currency unit)
-            paystack_status: Paystack status
-
-        Returns:
-            True if processed, False if already processed (idempotent)
-
-        Raises:
-            LookupError: If transaction not found
-            ValueError: If amount mismatch
-        """
-
-        result = await db.execute(
+        result = db.execute(
             select(Transaction).where(Transaction.reference == reference)
         )
         transaction = result.scalar_one_or_none()
@@ -110,7 +76,7 @@ class WebhookService:
 
         if amount != transaction.amount:
             transaction.status = TransactionStatus.FAILED
-            await db.commit()
+            db.commit()
             raise ValueError(
                 f"Amount mismatch for {reference}: expected {transaction.amount}, got {amount}"
             )
@@ -118,7 +84,7 @@ class WebhookService:
         if paystack_status == "success":
             transaction.status = TransactionStatus.SUCCESS
 
-            wallet_result = await db.execute(
+            wallet_result = db.execute(
                 select(Wallet).where(Wallet.user_id == transaction.user_id)
             )
             wallet = wallet_result.scalar_one()
@@ -126,7 +92,7 @@ class WebhookService:
             wallet.balance += amount
             wallet.updated_at = datetime.now(timezone.utc)
 
-            await db.commit()
+            db.commit()
 
             logger.info(
                 f"Successfully credited wallet for transaction {reference}: "
@@ -135,7 +101,7 @@ class WebhookService:
             return True
         else:
             transaction.status = TransactionStatus.FAILED
-            await db.commit()
+            db.commit()
 
             logger.warning(
                 f"Transaction failed from Paystack: {reference}, Status: {paystack_status}"

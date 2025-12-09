@@ -29,7 +29,7 @@ async def create_api_key(
     user, _ = current_user_data
 
     try:
-        result = await api_key_service.create_api_key(
+        result = api_key_service.create_api_key(
             db=db,
             user=user,
             name=request.name,
@@ -65,7 +65,7 @@ async def rollover_api_key(
     user, _ = current_user_data
 
     try:
-        result = await api_key_service.rollover_api_key(
+        result = api_key_service.rollover_api_key(
             db=db,
             user=user,
             expired_key_id=request.expired_key_id,

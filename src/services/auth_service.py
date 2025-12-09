@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 import httpx
 from dotenv import load_dotenv
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from src.models.user_model import User
 from src.models.wallet_model import Wallet
@@ -44,15 +44,6 @@ class AuthService:
             )
 
     def get_google_oauth_url(self, state: str = None) -> dict:
-        """
-        Generate Google OAuth authorization URL
-
-        Args:
-            state: Optional CSRF state parameter
-
-        Returns:
-            dict with authorization_url and state
-        """
         if not self.google_client_id:
             raise ValueError(
                 "Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET"
@@ -75,19 +66,7 @@ class AuthService:
 
         return {"authorization_url": authorization_url, "state": state}
 
-    async def exchange_code_for_token(self, code: str) -> dict:
-        """
-        Exchange authorization code for access token
-
-        Args:
-            code: Authorization code from Google
-
-        Returns:
-            dict containing access_token and other token info
-
-        Raises:
-            ValueError: If token exchange fails
-        """
+    def exchange_code_for_token(self, code: str) -> dict:
         if not self.google_client_id or not self.google_client_secret:
             raise ValueError("Google OAuth not configured")
 
@@ -99,68 +78,38 @@ class AuthService:
             "grant_type": "authorization_code",
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    self.google_token_url,
-                    data=token_data,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logger.error(f"Failed to exchange code for token: {str(e)}")
-                raise ValueError(f"Failed to exchange authorization code: {str(e)}")
+        try:
+            response = httpx.post(
+                self.google_token_url,
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to exchange code for token: {str(e)}")
+            raise ValueError(f"Failed to exchange authorization code: {str(e)}")
 
-    async def get_user_info(self, access_token: str) -> dict:
-        """
-        Get user information from Google
+    def get_user_info(self, access_token: str) -> dict:
+        try:
+            response = httpx.get(
+                self.google_userinfo_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to get user info: {str(e)}")
+            raise ValueError(f"Failed to get user information: {str(e)}")
 
-        Args:
-            access_token: Google access token
-
-        Returns:
-            dict containing user info (email, sub, name, picture)
-
-        Raises:
-            ValueError: If fetching user info fails
-        """
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(
-                    self.google_userinfo_url,
-                    headers={"Authorization": f"Bearer {access_token}"},
-                )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logger.error(f"Failed to get user info: {str(e)}")
-                raise ValueError(f"Failed to get user information: {str(e)}")
-
-    async def handle_google_callback(
-        self, code: str, db: AsyncSession
-    ) -> TokenResponse:
-        """
-        Handle Google OAuth callback and create/login user
-
-        Args:
-            code: OAuth authorization code
-            db: Database session
-
-        Returns:
-            TokenResponse with JWT token
-
-        Raises:
-            ValueError: If authentication fails
-        """
-
-        token_data = await self.exchange_code_for_token(code)
+    def handle_google_callback(self, code: str, db: Session) -> TokenResponse:
+        token_data = self.exchange_code_for_token(code)
         access_token = token_data.get("access_token")
 
         if not access_token:
             raise ValueError("Failed to get access token from Google")
 
-        user_info = await self.get_user_info(access_token)
+        user_info = self.get_user_info(access_token)
         logger.info(f"Google user info: {user_info}")
 
         email = user_info.get("email")
@@ -173,7 +122,7 @@ class AuthService:
 
         logger.info(f"Google OAuth callback for email: {email}")
 
-        user = await self._get_or_create_user(
+        user = self._get_or_create_user(
             db=db, email=email, google_id=google_id, name=name, picture=picture
         )
 
@@ -183,33 +132,19 @@ class AuthService:
 
         return TokenResponse(access_token=jwt_token, token_type="bearer")
 
-    async def _get_or_create_user(
+    def _get_or_create_user(
         self,
-        db: AsyncSession,
+        db: Session,
         email: str,
         google_id: str,
         name: str = None,
         picture: str = None,
     ) -> User:
-        """
-        Get existing user or create new one with wallet
-
-        Args:
-            db: Database session
-            email: User email
-            google_id: Google user ID
-            name: User name
-            picture: User picture URL
-
-        Returns:
-            User object
-        """
-
-        result = await db.execute(select(User).where(User.google_id == google_id))
+        result = db.execute(select(User).where(User.google_id == google_id))
         user = result.scalar_one_or_none()
 
         if not user:
-            result = await db.execute(select(User).where(User.email == email))
+            result = db.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 
             if user:
@@ -218,7 +153,7 @@ class AuthService:
                     user.name = name
                 if picture:
                     user.picture = picture
-                await db.commit()
+                db.commit()
                 logger.info(f"Updated existing user with Google ID: {email}")
                 return user
 
@@ -233,12 +168,12 @@ class AuthService:
             picture=picture,
         )
         db.add(user)
-        await db.flush()
+        db.flush()
 
         wallet = Wallet(user_id=user.id)
         db.add(wallet)
-        await db.commit()
-        await db.refresh(user)
+        db.commit()
+        db.refresh(user)
 
         logger.info(f"Created new user: {email}")
 

@@ -82,7 +82,7 @@ async def google_callback(
     ```
     """
     try:
-        token_response = await auth_service.handle_google_callback(code, db)
+        token_response = auth_service.handle_google_callback(code, db)
         logger.info("Google OAuth callback successful - returning JWT token")
         return token_response
 

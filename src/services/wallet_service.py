@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import List
 
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from src.models.transaction_model import Transaction, TransactionStatus, TransactionType
 from src.models.user_model import User
@@ -24,44 +24,20 @@ from src.utils.security import generate_transaction_reference
 class WalletService:
     """Service for wallet operations"""
 
-    async def get_or_create_wallet(self, db: AsyncSession, user: User) -> Wallet:
-        """
-        Get or create wallet for user
-
-        Args:
-            db: Database session
-            user: User object
-
-        Returns:
-            Wallet object
-        """
-        result = await db.execute(select(Wallet).where(Wallet.user_id == user.id))
+    def get_or_create_wallet(self, db: Session, user: User) -> Wallet:
+        result = db.execute(select(Wallet).where(Wallet.user_id == user.id))
         wallet = result.scalar_one_or_none()
 
         if not wallet:
             wallet = Wallet(user_id=user.id)
             db.add(wallet)
-            await db.flush()
+            db.flush()
 
         return wallet
 
-    async def initiate_deposit(
-        self, db: AsyncSession, user: User, amount: Decimal
+    def initiate_deposit(
+        self, db: Session, user: User, amount: Decimal
     ) -> DepositResponse:
-        """
-        Initiate a Paystack deposit transaction
-
-        Args:
-            db: Database session
-            user: User object
-            amount: Deposit amount
-
-        Returns:
-            DepositResponse with reference and authorization URL
-
-        Raises:
-            ValueError: If amount is invalid
-        """
         if amount <= 0:
             raise ValueError("Amount must be greater than zero")
 
@@ -76,37 +52,23 @@ class WalletService:
             paystack_reference=reference,
         )
         db.add(transaction)
-        await db.flush()
+        db.flush()
 
-        paystack_data = await paystack_service.initialize_transaction(
+        paystack_data = paystack_service.initialize_transaction(
             email=user.email, amount=amount, reference=reference
         )
 
         transaction.authorization_url = paystack_data["authorization_url"]
-        await db.commit()
+        db.commit()
 
         return DepositResponse(
             reference=reference, authorization_url=paystack_data["authorization_url"]
         )
 
-    async def get_deposit_status(
-        self, db: AsyncSession, reference: str, user: User
+    def get_deposit_status(
+        self, db: Session, reference: str, user: User
     ) -> DepositStatusResponse:
-        """
-        Get deposit transaction status (read-only)
-
-        Args:
-            db: Database session
-            reference: Transaction reference
-            user: User object
-
-        Returns:
-            DepositStatusResponse
-
-        Raises:
-            LookupError: If transaction not found
-        """
-        result = await db.execute(
+        result = db.execute(
             select(Transaction).where(
                 and_(
                     Transaction.reference == reference,
@@ -126,33 +88,17 @@ class WalletService:
             amount=transaction.amount,
         )
 
-    async def transfer_funds(
+    def transfer_funds(
         self,
-        db: AsyncSession,
+        db: Session,
         sender: User,
         recipient_wallet_number: str,
         amount: Decimal,
     ) -> TransferResponse:
-        """
-        Transfer funds between wallets (ATOMIC operation)
-
-        Args:
-            db: Database session
-            sender: Sender user object
-            recipient_wallet_number: Recipient wallet number
-            amount: Transfer amount
-
-        Returns:
-            TransferResponse
-
-        Raises:
-            ValueError: If validation fails
-            LookupError: If recipient not found
-        """
         if amount <= 0:
             raise ValueError("Transfer amount must be greater than zero")
 
-        sender_wallet_result = await db.execute(
+        sender_wallet_result = db.execute(
             select(Wallet).where(Wallet.user_id == sender.id)
         )
         sender_wallet = sender_wallet_result.scalar_one_or_none()
@@ -163,7 +109,7 @@ class WalletService:
         if sender_wallet.balance < amount:
             raise ValueError("Insufficient balance")
 
-        recipient_wallet_result = await db.execute(
+        recipient_wallet_result = db.execute(
             select(Wallet).where(Wallet.wallet_number == recipient_wallet_number)
         )
         recipient_wallet = recipient_wallet_result.scalar_one_or_none()
@@ -193,36 +139,16 @@ class WalletService:
         )
         db.add(transaction)
 
-        await db.commit()
+        db.commit()
 
         return TransferResponse(status="success", message="Transfer completed")
 
-    async def get_balance(self, db: AsyncSession, user: User) -> Decimal:
-        """
-        Get wallet balance
-
-        Args:
-            db: Database session
-            user: User object
-
-        Returns:
-            Balance as Decimal
-        """
-        wallet = await self.get_or_create_wallet(db, user)
+    def get_balance(self, db: Session, user: User) -> Decimal:
+        wallet = self.get_or_create_wallet(db, user)
         return wallet.balance
 
-    async def get_transactions(self, db: AsyncSession, user: User) -> List[Transaction]:
-        """
-        Get user transaction history
-
-        Args:
-            db: Database session
-            user: User object
-
-        Returns:
-            List of Transaction objects
-        """
-        result = await db.execute(
+    def get_transactions(self, db: Session, user: User) -> List[Transaction]:
+        result = db.execute(
             select(Transaction)
             .where(Transaction.user_id == user.id)
             .order_by(Transaction.created_at.desc())
