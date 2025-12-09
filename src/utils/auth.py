@@ -1,15 +1,16 @@
 """
 Authentication Dependencies for FastAPI
+Supports both JWT tokens and API keys
 """
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, select
+from sqlalchemy.orm import Session
 
 from src.db.session import get_db
 from src.models.api_key_model import APIKey
@@ -20,9 +21,9 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
-async def get_current_user_from_jwt(
+def get_current_user_from_jwt(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ) -> Optional[User]:
     """Get current user from JWT token"""
     if not credentials:
@@ -46,19 +47,28 @@ async def get_current_user_from_jwt(
             detail="User not found or inactive",
         )
 
+    logger.debug(f"Authenticated user {user.id} via JWT")
     return user
 
 
-async def get_current_user_from_api_key(
-    x_api_key: Optional[str] = Header(None), db: AsyncSession = Depends(get_db)
-) -> tuple[Optional[User], Optional[APIKey]]:
+def get_current_user_from_api_key(
+    x_api_key: Optional[str] = Header(None), db: Session = Depends(get_db)
+) -> Tuple[Optional[User], Optional[APIKey]]:
     """Get current user from API key"""
     if not x_api_key:
         return None, None
 
     key_hash = hash_api_key(x_api_key)
 
-    result = db.execute(select(APIKey).where(APIKey.key_hash == key_hash))
+    result = db.execute(
+        select(APIKey).where(
+            and_(
+                APIKey.key_hash == key_hash,
+                APIKey.is_active,
+                APIKey.is_revoked == False,  # noqa: E712
+            )
+        )
+    )
     api_key = result.scalar_one_or_none()
 
     if not api_key:
@@ -66,18 +76,12 @@ async def get_current_user_from_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
         )
 
-    if api_key.expires_at < datetime.now(timezone.utc):
+    if api_key.expires_at <= datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired"
         )
 
-    if api_key.is_revoked or not api_key.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key revoked or inactive",
-        )
-
-    result = await db.execute(select(User).where(User.id == api_key.user_id))
+    result = db.execute(select(User).where(User.id == api_key.user_id))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:
@@ -86,25 +90,32 @@ async def get_current_user_from_api_key(
             detail="User not found or inactive",
         )
 
+    # Update last_used_at timestamp
+    api_key.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+
+    logger.debug(f"Authenticated user {user.id} via API key")
     return user, api_key
 
 
-async def get_current_user(
+def get_current_user(
     jwt_user: Optional[User] = Depends(get_current_user_from_jwt),
-    api_key_data: tuple = Depends(get_current_user_from_api_key),
-) -> tuple[User, Optional[APIKey]]:
+    api_key_data: Tuple[Optional[User], Optional[APIKey]] = Depends(
+        get_current_user_from_api_key
+    ),
+) -> Tuple[User, Optional[APIKey]]:
     """
     Get current user from either JWT or API key
     Returns: (User, Optional[APIKey])
     """
     api_user, api_key = api_key_data
 
+    # JWT takes priority
     if jwt_user:
-        logger.debug(f"Authenticated user {jwt_user.id} via JWT")
         return jwt_user, None
 
+    # Fall back to API key
     if api_user:
-        logger.debug(f"Authenticated user {api_user.id} via API key")
         return api_user, api_key
 
     raise HTTPException(
@@ -121,13 +132,17 @@ def require_permission(permission: str):
     API key users must have the specific permission
     """
 
-    async def check_permission(current_user_data: tuple = Depends(get_current_user)):
+    def check_permission(
+        current_user_data: Tuple[User, Optional[APIKey]] = Depends(get_current_user),
+    ) -> User:
         user, api_key = current_user_data
 
+        # JWT authentication - grant all permissions
         if api_key is None:
             logger.debug(f"JWT user {user.id} has all permissions")
             return user
 
+        # API key authentication - check specific permissions
         if permission not in api_key.permissions:
             logger.warning(
                 f"API key {api_key.id} missing permission '{permission}' "

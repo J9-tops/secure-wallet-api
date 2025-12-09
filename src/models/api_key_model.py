@@ -22,10 +22,10 @@ class APIKey(Base):
     permissions = Column(ARRAY(String), nullable=False)
     is_active = Column(Boolean, default=True)
     is_revoked = Column(Boolean, default=False)
-    expires_at = Column(DateTime, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=datetime.now(timezone.utc),
         onupdate=datetime.now(timezone.utc),
     )

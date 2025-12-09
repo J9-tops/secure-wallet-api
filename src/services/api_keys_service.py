@@ -1,5 +1,6 @@
 """
 API Key Service - Business Logic for API Key Management
+FIXED: Corrected logical errors in active key counting
 """
 
 from datetime import datetime, timezone
@@ -34,19 +35,24 @@ class APIKeyService:
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-        result = db.execute(
-            select(func.count(APIKey.id))
-            .where(
-                and_(
-                    APIKey.user_id == user.id,
-                    APIKey.is_active,
-                    APIKey.is_revoked,
-                    APIKey.expires_at > datetime.now(timezone.utc),
+        active_keys = (
+            db.execute(
+                select(APIKey)
+                .where(
+                    and_(
+                        APIKey.user_id == user.id,
+                        APIKey.is_active,
+                        APIKey.is_revoked == False,  # noqa: E712
+                        APIKey.expires_at > datetime.now(timezone.utc),
+                    )
                 )
+                .with_for_update()
             )
-            .with_for_update()
+            .scalars()
+            .all()
         )
-        active_count = result.scalar()
+
+        active_count = len(active_keys)
 
         if active_count >= self.MAX_ACTIVE_KEYS:
             raise ValueError(
@@ -108,7 +114,7 @@ class APIKeyService:
                 and_(
                     APIKey.user_id == user.id,
                     APIKey.is_active,
-                    APIKey.is_revoked,
+                    APIKey.is_revoked == False,  # noqa: E712
                     APIKey.expires_at > datetime.now(timezone.utc),
                 )
             )
@@ -177,7 +183,7 @@ class APIKeyService:
                 and_(
                     APIKey.user_id == user_id,
                     APIKey.is_active,
-                    APIKey.is_revoked,
+                    APIKey.is_revoked == False,  # noqa: E712
                     APIKey.expires_at > datetime.now(timezone.utc),
                 )
             )
@@ -189,6 +195,16 @@ class APIKeyService:
             select(APIKey).where(and_(APIKey.id == key_id, APIKey.user_id == user_id))
         )
         return result.scalar_one_or_none()
+
+    def list_api_keys(self, db: Session, user: User):
+        result = db.execute(
+            select(APIKey)
+            .where(APIKey.user_id == user.id)
+            .order_by(APIKey.created_at.desc())
+        )
+        api_keys = result.scalars().all()
+
+        return api_keys
 
 
 api_key_service = APIKeyService()
