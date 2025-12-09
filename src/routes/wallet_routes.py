@@ -30,7 +30,6 @@ async def initiate_deposit(
     Requires: JWT or API key with 'deposit' permission
     """
     try:
-        # Assuming wallet_service.initiate_deposit returns a dict or Pydantic model
         result = await wallet_service.initiate_deposit(
             db=db, user=current_user, amount=request.amount
         )
@@ -72,15 +71,12 @@ async def paystack_webhook(
     This is the ONLY endpoint that credits wallets
     """
     try:
-        # Get raw body for signature verification
         body = await request.body()
 
-        # Verify and process webhook
         await webhook_service.process_paystack_webhook(
             db=db, body=body, signature=x_paystack_signature
         )
 
-        # Webhooks often just need a simple 200 OK to acknowledge receipt
         return ({"status": True},)
 
     except ValueError as e:
@@ -92,8 +88,6 @@ async def paystack_webhook(
         )
     except LookupError as e:
         logger.warning(f"Webhook processing - transaction not found: {str(e)}")
-        # Return 200 to prevent Paystack retries for non-existent transactions
-        # This is technically a "success" in handling the hook, even if logic failed
         return success_response(
             status_code=status.HTTP_200_OK,
             message="Transaction not found, but webhook acknowledged",
@@ -227,7 +221,6 @@ async def get_transactions(
     """
     try:
         transactions = await wallet_service.get_transactions(db=db, user=current_user)
-        # Convert ORM objects to list of dicts/schemas before wrapping
         data_list = [TransactionResponse.from_orm(t) for t in transactions]
 
         return ({"transactions": data_list, "count": len(data_list)},)

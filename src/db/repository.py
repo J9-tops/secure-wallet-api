@@ -8,9 +8,7 @@ from typing import Generic, List, Optional, Type, TypeVar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.session import Base
-
-T = TypeVar("T", bound=Base)
+T = TypeVar("T")
 
 
 class BaseRepository(Generic[T]):

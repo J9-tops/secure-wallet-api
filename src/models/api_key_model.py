@@ -3,7 +3,7 @@ API Key Model
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import ARRAY, Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.orm import relationship
@@ -23,7 +23,11 @@ class APIKey(Base):
     is_active = Column(Boolean, default=True)
     is_revoked = Column(Boolean, default=False)
     expires_at = Column(DateTime, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="api_keys")

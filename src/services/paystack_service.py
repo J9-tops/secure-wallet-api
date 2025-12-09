@@ -56,7 +56,6 @@ class PaystackService:
         if not self.secret_key:
             raise Exception("Paystack secret key not configured")
 
-        # Convert amount to kobo (smallest currency unit)
         amount_in_kobo = int(amount * 100)
 
         payload = {

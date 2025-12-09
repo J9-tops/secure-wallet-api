@@ -25,20 +25,11 @@ async def google_login(
     """
     Get Google OAuth authorization URL
 
-    **For FastAPI Docs Testing:**
-    1. Click "Try it out" and "Execute"
-    2. Copy the `authorization_url` from the response
-    3. Paste it in your browser and press Enter
-    4. Complete Google sign-in
-    5. You'll be redirected back with a `code` parameter
-    6. Copy that code and use it in the `/auth/google/callback` endpoint
-
     **Response:**
     ```json
     {
         "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?...",
         "state": "random_state_string",
-        "instructions": "Open the authorization_url in your browser to sign in with Google"
     }
     ```
     """
@@ -82,20 +73,6 @@ async def google_callback(
     """
     Exchange Google authorization code for JWT token
 
-    **How to use:**
-    1. After signing in with Google, you'll be redirected to a URL like:
-       `http://localhost:8000/auth/google/callback?code=4/0AY0e-g7...&state=...`
-    2. Copy the `code` parameter value from that URL
-    3. Paste it in the `code` field below
-    4. Click "Execute"
-    5. You'll receive your JWT token!
-
-    **Using the token:**
-    1. Copy the `access_token` from the response
-    2. Click "Authorize" button at the top of Swagger UI
-    3. Enter: `Bearer YOUR_TOKEN_HERE`
-    4. Now you can test protected endpoints!
-
     **Response:**
     ```json
     {
@@ -130,11 +107,6 @@ async def google_callback(
 async def test_token(current_user: dict = Depends(get_current_user)):
     """
     Test endpoint to verify your JWT token is working.
-
-    **How to test:**
-    1. Get your token from `/auth/google/callback`
-    2. Click "Authorize" in Swagger UI and enter: `Bearer YOUR_TOKEN_HERE`
-    3. Try this endpoint - it should return success!
 
     **Response:**
     ```json

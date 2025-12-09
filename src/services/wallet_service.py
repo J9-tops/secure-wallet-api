@@ -2,7 +2,7 @@
 Wallet Service - Business Logic for Wallet Operations
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
 
@@ -65,10 +65,8 @@ class WalletService:
         if amount <= 0:
             raise ValueError("Amount must be greater than zero")
 
-        # Generate unique reference
         reference = generate_transaction_reference()
 
-        # Create pending transaction
         transaction = Transaction(
             user_id=user.id,
             reference=reference,
@@ -80,12 +78,10 @@ class WalletService:
         db.add(transaction)
         await db.flush()
 
-        # Initialize Paystack transaction
         paystack_data = await paystack_service.initialize_transaction(
             email=user.email, amount=amount, reference=reference
         )
 
-        # Update transaction with authorization URL
         transaction.authorization_url = paystack_data["authorization_url"]
         await db.commit()
 
@@ -156,7 +152,6 @@ class WalletService:
         if amount <= 0:
             raise ValueError("Transfer amount must be greater than zero")
 
-        # Get sender wallet
         sender_wallet_result = await db.execute(
             select(Wallet).where(Wallet.user_id == sender.id)
         )
@@ -165,11 +160,9 @@ class WalletService:
         if not sender_wallet:
             raise ValueError("Sender wallet not found")
 
-        # Check balance
         if sender_wallet.balance < amount:
             raise ValueError("Insufficient balance")
 
-        # Get recipient wallet
         recipient_wallet_result = await db.execute(
             select(Wallet).where(Wallet.wallet_number == recipient_wallet_number)
         )
@@ -178,21 +171,17 @@ class WalletService:
         if not recipient_wallet:
             raise LookupError("Recipient wallet not found")
 
-        # Prevent self-transfer
         if sender_wallet.id == recipient_wallet.id:
             raise ValueError("Cannot transfer to your own wallet")
 
-        # Generate reference
         reference = generate_transaction_reference()
 
-        # Perform atomic transfer
         sender_wallet.balance -= amount
-        sender_wallet.updated_at = datetime.utcnow()
+        sender_wallet.updated_at = datetime.now(timezone.utc)
 
         recipient_wallet.balance += amount
-        recipient_wallet.updated_at = datetime.utcnow()
+        recipient_wallet.updated_at = datetime.now(timezone.utc)
 
-        # Create transaction record
         transaction = Transaction(
             user_id=sender.id,
             reference=reference,

@@ -32,7 +32,6 @@ class AuthService:
             "GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback"
         )
 
-        # Google OAuth endpoints
         self.google_auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
         self.google_token_url = "https://oauth2.googleapis.com/token"
         self.google_userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
@@ -59,7 +58,6 @@ class AuthService:
                 "Google OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET"
             )
 
-        # Generate state for CSRF protection if not provided
         if not state:
             state = secrets.token_urlsafe(32)
 
@@ -155,14 +153,13 @@ class AuthService:
         Raises:
             ValueError: If authentication fails
         """
-        # Exchange code for access token
+
         token_data = await self.exchange_code_for_token(code)
         access_token = token_data.get("access_token")
 
         if not access_token:
             raise ValueError("Failed to get access token from Google")
 
-        # Get user info
         user_info = await self.get_user_info(access_token)
         logger.info(f"Google user info: {user_info}")
 
@@ -176,12 +173,10 @@ class AuthService:
 
         logger.info(f"Google OAuth callback for email: {email}")
 
-        # Get or create user
         user = await self._get_or_create_user(
             db=db, email=email, google_id=google_id, name=name, picture=picture
         )
 
-        # Generate JWT
         jwt_token = create_jwt_token(user.id, user.email)
 
         logger.info(f"Successfully authenticated user: {email}")
@@ -209,16 +204,14 @@ class AuthService:
         Returns:
             User object
         """
-        # Check if user exists by google_id first
+
         result = await db.execute(select(User).where(User.google_id == google_id))
         user = result.scalar_one_or_none()
 
-        # If not found by google_id, check by email
         if not user:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 
-            # Update google_id if user exists with email
             if user:
                 user.google_id = google_id
                 if name:
@@ -229,12 +222,10 @@ class AuthService:
                 logger.info(f"Updated existing user with Google ID: {email}")
                 return user
 
-        # User exists, return it
         if user:
             logger.info(f"Existing user logged in: {email}")
             return user
 
-        # Create new user
         user = User(
             email=email,
             google_id=google_id,
@@ -244,7 +235,6 @@ class AuthService:
         db.add(user)
         await db.flush()
 
-        # Create wallet for new user
         wallet = Wallet(user_id=user.id)
         db.add(wallet)
         await db.commit()
@@ -255,5 +245,4 @@ class AuthService:
         return user
 
 
-# Singleton instance
 auth_service = AuthService()

@@ -3,7 +3,7 @@ Authentication Dependencies for FastAPI
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, status
@@ -66,20 +66,17 @@ async def get_current_user_from_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
         )
 
-    # Check if key is expired
-    if api_key.expires_at < datetime.utcnow():
+    if api_key.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired"
         )
 
-    # Check if key is revoked
     if api_key.is_revoked or not api_key.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key revoked or inactive",
         )
 
-    # Get user
     result = await db.execute(select(User).where(User.id == api_key.user_id))
     user = result.scalar_one_or_none()
 
@@ -102,7 +99,6 @@ async def get_current_user(
     """
     api_user, api_key = api_key_data
 
-    # JWT takes precedence
     if jwt_user:
         logger.debug(f"Authenticated user {jwt_user.id} via JWT")
         return jwt_user, None
@@ -128,12 +124,10 @@ def require_permission(permission: str):
     async def check_permission(current_user_data: tuple = Depends(get_current_user)):
         user, api_key = current_user_data
 
-        # JWT users have all permissions
         if api_key is None:
             logger.debug(f"JWT user {user.id} has all permissions")
             return user
 
-        # Check API key permissions
         if permission not in api_key.permissions:
             logger.warning(
                 f"API key {api_key.id} missing permission '{permission}' "

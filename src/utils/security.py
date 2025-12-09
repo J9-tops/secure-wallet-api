@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
@@ -27,8 +27,8 @@ def create_jwt_token(user_id: str, email: str) -> str:
     payload = {
         "user_id": user_id,
         "email": email,
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS),
+        "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -59,7 +59,7 @@ def parse_expiry(expiry: str) -> datetime:
     Parse expiry string to datetime
     Accepts: 1H, 1D, 1M, 1Y
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     if expiry == "1H":
         return now + timedelta(hours=1)
@@ -88,4 +88,4 @@ def verify_paystack_signature(payload: bytes, signature: str) -> bool:
 
 def generate_transaction_reference() -> str:
     """Generate unique transaction reference"""
-    return f"TXN_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+    return f"TXN_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"

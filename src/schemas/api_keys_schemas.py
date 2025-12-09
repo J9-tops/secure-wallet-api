@@ -8,10 +8,9 @@ from typing import List
 from pydantic import BaseModel, Field, field_validator
 
 
-# API Key Schemas
 class APIKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    permissions: List[str] = Field(..., min_items=1)
+    permissions: List[str] = Field(..., min_length=1)
     expiry: str = Field(..., pattern="^(1H|1D|1M|1Y)$")
 
     @field_validator("permissions")

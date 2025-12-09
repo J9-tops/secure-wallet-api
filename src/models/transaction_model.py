@@ -4,7 +4,7 @@ Transaction Model
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String
 from sqlalchemy import Enum as SQLEnum
@@ -36,16 +36,17 @@ class Transaction(Base):
         SQLEnum(TransactionStatus), default=TransactionStatus.PENDING, nullable=False
     )
 
-    # For transfers
     recipient_wallet_number = Column(String(13), nullable=True)
     recipient_user_id = Column(String, nullable=True)
 
-    # Paystack specific
     paystack_reference = Column(String, nullable=True)
     authorization_url = Column(String, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
-    # Relationships
     user = relationship("User", back_populates="transactions")

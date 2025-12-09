@@ -47,8 +47,10 @@ class APIKeyService:
         """
         expires_at = parse_expiry(expiry)
 
-        async with db.begin():  # atomic transaction
-            # count active keys with row-level lock
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        async with db.begin():
             result = await db.execute(
                 select(func.count(APIKey.id))
                 .where(
@@ -67,7 +69,6 @@ class APIKeyService:
                     f"Maximum of {self.MAX_ACTIVE_KEYS} active API keys allowed per user"
                 )
 
-            # generate unique API key with retry
             for attempt in range(self.MAX_RETRY_ATTEMPTS):
                 api_key = generate_api_key()
                 key_hash = hash_api_key(api_key)
@@ -82,10 +83,10 @@ class APIKeyService:
                 )
                 db.add(api_key_record)
                 try:
-                    await db.flush()  # try insert
+                    await db.flush()
                     break
                 except IntegrityError:
-                    await db.rollback()  # retry on collision
+                    await db.rollback()
                     if attempt == self.MAX_RETRY_ATTEMPTS - 1:
                         raise ValueError(
                             "Failed to generate unique API key after multiple attempts"
@@ -113,9 +114,10 @@ class APIKeyService:
             ValueError: If validation fails
         """
         new_expires_at = parse_expiry(new_expiry)
+        if new_expires_at.tzinfo is None:
+            new_expires_at = new_expires_at.replace(tzinfo=timezone.utc)
 
-        async with db.begin():  # atomic transaction
-            # Get expired key with row-level lock
+        async with db.begin():
             result = await db.execute(
                 select(APIKey)
                 .where(and_(APIKey.id == expired_key_id, APIKey.user_id == user.id))
@@ -126,15 +128,12 @@ class APIKeyService:
             if not expired_key:
                 raise LookupError("API key not found")
 
-            # Verify key is actually expired
             if expired_key.expires_at > datetime.now(timezone.utc):
                 raise ValueError("API key is not expired yet")
 
-            # Check if already revoked
             if expired_key.is_revoked:
                 raise ValueError("API key has already been revoked")
 
-            # Count active keys with row-level lock (excluding the expired one)
             result = await db.execute(
                 select(func.count(APIKey.id))
                 .where(
@@ -154,13 +153,11 @@ class APIKeyService:
                     f"Maximum of {self.MAX_ACTIVE_KEYS} active API keys allowed per user"
                 )
 
-            # Generate new API key with retry logic
             for attempt in range(self.MAX_RETRY_ATTEMPTS):
                 new_api_key = generate_api_key()
                 new_key_hash = hash_api_key(new_api_key)
                 new_key_prefix = new_api_key[:20]
 
-                # Create new API key with same permissions
                 new_api_key_record = APIKey(
                     user_id=user.id,
                     name=expired_key.name,
@@ -173,16 +170,15 @@ class APIKeyService:
                 db.add(new_api_key_record)
 
                 try:
-                    await db.flush()  # try insert
+                    await db.flush()
                     break
                 except IntegrityError:
-                    await db.rollback()  # retry on collision
+                    await db.rollback()
                     if attempt == self.MAX_RETRY_ATTEMPTS - 1:
                         raise ValueError(
                             "Failed to generate unique API key after multiple attempts"
                         )
 
-            # Mark old key as revoked (only after successful new key creation)
             expired_key.is_revoked = True
 
         return APIKeyResponse(api_key=new_api_key, expires_at=new_expires_at)
@@ -204,7 +200,6 @@ class APIKeyService:
             ValueError: If key already revoked
         """
         async with db.begin():
-            # Get key with row-level lock
             result = await db.execute(
                 select(APIKey)
                 .where(and_(APIKey.id == key_id, APIKey.user_id == user.id))
@@ -263,5 +258,4 @@ class APIKeyService:
         return result.scalar_one_or_none()
 
 
-# Singleton instance
 api_key_service = APIKeyService()

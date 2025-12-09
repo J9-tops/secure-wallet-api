@@ -3,7 +3,7 @@ User Model
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, String
 from sqlalchemy.orm import relationship
@@ -20,10 +20,13 @@ class User(Base):
     name = Column(String, nullable=True)
     picture = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
-    # Relationships
     wallet = relationship("Wallet", back_populates="user", uselist=False)
     api_keys = relationship("APIKey", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
