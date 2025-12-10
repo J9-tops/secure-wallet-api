@@ -9,6 +9,17 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_db
+from src.routes.docs.auth_routes_docs import (
+    google_callback_custom_errors,
+    google_callback_custom_success,
+    google_callback_responses,
+    google_login_custom_errors,
+    google_login_custom_success,
+    google_login_responses,
+    test_token_custom_errors,
+    test_token_custom_success,
+    test_token_responses,
+)
 from src.schemas.auth_schemas import TokenResponse
 from src.services.auth_service import auth_service
 from src.utils.auth import get_current_user
@@ -18,7 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/google")
+@router.get("/google", responses=google_login_responses)
 async def google_login(
     state: str = Query(None, description="Optional CSRF state parameter"),
 ):
@@ -36,12 +47,7 @@ async def google_login(
     try:
         oauth_data = auth_service.get_google_oauth_url(state)
 
-        return (
-            {
-                "authorization_url": oauth_data["authorization_url"],
-                "state": oauth_data["state"],
-            },
-        )
+        return oauth_data
 
     except ValueError as e:
         logger.error(f"OAuth configuration error: {str(e)}")
@@ -60,7 +66,15 @@ async def google_login(
         )
 
 
-@router.get("/google/callback", response_model=TokenResponse)
+google_login._custom_errors = google_login_custom_errors
+google_login._custom_success = google_login_custom_success
+
+
+@router.get(
+    "/google/callback",
+    response_model=TokenResponse,
+    responses=google_callback_responses,
+)
 async def google_callback(
     code: str = Query(
         ..., description="Authorization code from Google (from redirect URL)"
@@ -103,7 +117,11 @@ async def google_callback(
         )
 
 
-@router.get("/test-token")
+google_callback._custom_errors = google_callback_custom_errors
+google_callback._custom_success = google_callback_custom_success
+
+
+@router.get("/test-token", responses=test_token_responses)
 async def test_token(current_user: dict = Depends(get_current_user)):
     """
     Test endpoint to verify your JWT token is working.
@@ -133,3 +151,7 @@ async def test_token(current_user: dict = Depends(get_current_user)):
             message="Failed to validate token",
             error="VALIDATION_ERROR",
         )
+
+
+test_token._custom_errors = test_token_custom_errors
+test_token._custom_success = test_token_custom_success

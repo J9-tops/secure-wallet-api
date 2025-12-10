@@ -8,6 +8,20 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from src.db.session import get_db
+from src.routes.docs.api_key_routes_docs import (
+    create_api_key_custom_errors,
+    create_api_key_custom_success,
+    create_api_key_responses,
+    list_api_keys_custom_errors,
+    list_api_keys_custom_success,
+    list_api_keys_responses,
+    revoke_api_key_custom_errors,
+    revoke_api_key_custom_success,
+    revoke_api_key_responses,
+    rollover_api_key_custom_errors,
+    rollover_api_key_custom_success,
+    rollover_api_key_responses,
+)
 from src.schemas.api_keys_schemas import (
     APIKeyCreate,
     APIKeyResponse,
@@ -21,7 +35,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/create", response_model=APIKeyResponse)
+@router.post(
+    "/create", response_model=APIKeyResponse, responses=create_api_key_responses
+)
 def create_api_key(
     request: APIKeyCreate,
     current_user_data: tuple = Depends(get_current_user),
@@ -75,7 +91,11 @@ def create_api_key(
         )
 
 
-@router.get("/list")
+create_api_key._custom_errors = create_api_key_custom_errors
+create_api_key._custom_success = create_api_key_custom_success
+
+
+@router.get("/list", responses=list_api_keys_responses)
 def list_api_keys(
     current_user_data: tuple = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -104,7 +124,11 @@ def list_api_keys(
         )
 
 
-@router.post("/revoke/{key_id}")
+list_api_keys._custom_errors = list_api_keys_custom_errors
+list_api_keys._custom_success = list_api_keys_custom_success
+
+
+@router.post("/revoke/{key_id}", responses=revoke_api_key_responses)
 def revoke_api_key(
     key_id: str,
     current_user_data: tuple = Depends(get_current_user),
@@ -150,7 +174,13 @@ def revoke_api_key(
         )
 
 
-@router.post("/rollover", response_model=APIKeyResponse)
+revoke_api_key._custom_success = revoke_api_key_custom_success
+revoke_api_key._custom_errors = revoke_api_key_custom_errors
+
+
+@router.post(
+    "/rollover", response_model=APIKeyResponse, responses=rollover_api_key_responses
+)
 def rollover_api_key(
     request: APIKeyRollover,
     current_user_data: tuple = Depends(get_current_user),
@@ -197,3 +227,7 @@ def rollover_api_key(
             message="Failed to rollover API key. Please try again",
             error="SERVER_ERROR",
         )
+
+
+rollover_api_key._custom_success = rollover_api_key_custom_errors
+rollover_api_key._custom_errors = rollover_api_key_custom_success

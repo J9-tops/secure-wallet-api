@@ -85,7 +85,13 @@ class AuthService:
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response.raise_for_status()
-            return response.json()
+
+            result_json = response.json()
+            result = {
+                "authorization_url": result_json["authorization_url"],
+                "state": result_json["state"],
+            }
+            return result
         except httpx.HTTPError as e:
             logger.error(f"Failed to exchange code for token: {str(e)}")
             raise ValueError(f"Failed to exchange authorization code: {str(e)}")

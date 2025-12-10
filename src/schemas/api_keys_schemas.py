@@ -13,6 +13,10 @@ class APIKeyCreate(BaseModel):
     permissions: List[str] = Field(..., min_length=1)
     expiry: str = Field(..., pattern="^(1H|1D|1M|1Y)$")
 
+    @field_validator("permissions", mode="before")
+    def normalize_permissions(cls, v):
+        return [perm.lower() for perm in v]
+
     @field_validator("permissions")
     def validate_permissions(cls, v):
         valid_permissions = {"deposit", "transfer", "read"}

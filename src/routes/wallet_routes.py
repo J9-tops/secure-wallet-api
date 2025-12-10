@@ -5,6 +5,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_db
 from src.models.user_model import User
+from src.routes.docs.wallet_routes_docs import (
+    get_balance_custom_errors,
+    get_balance_custom_success,
+    get_balance_responses,
+    get_deposit_status_custom_errors,
+    get_deposit_status_custom_success,
+    get_deposit_status_responses,
+    get_transactions_custom_errors,
+    get_transactions_custom_success,
+    get_transactions_responses,
+    get_wallet_details_custom_errors,
+    get_wallet_details_custom_success,
+    get_wallet_details_responses,
+    initiate_deposit_custom_errors,
+    initiate_deposit_custom_success,
+    initiate_deposit_responses,
+    paystack_webhook_custom_errors,
+    paystack_webhook_custom_success,
+    paystack_webhook_responses,
+    transfer_funds_custom_errors,
+    transfer_funds_custom_success,
+    transfer_funds_responses,
+)
 from src.schemas.wallet_schemas import (
     DepositRequest,
     TransactionResponse,
@@ -19,7 +42,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/deposit")
+@router.post("/deposit", responses=initiate_deposit_responses)
 async def initiate_deposit(
     request: DepositRequest,
     current_user: User = Depends(require_permission("deposit")),
@@ -56,7 +79,11 @@ async def initiate_deposit(
         )
 
 
-@router.get("/details")
+initiate_deposit._custom_errors = initiate_deposit_custom_errors
+initiate_deposit._custom_success = initiate_deposit_custom_success
+
+
+@router.get("/details", responses=get_wallet_details_responses)
 async def get_wallet_details(
     current_user: User = Depends(require_permission("read")),
     db: AsyncSession = Depends(get_db),
@@ -87,7 +114,11 @@ async def get_wallet_details(
         )
 
 
-@router.post("/paystack/webhook")
+get_wallet_details._custom_errors = get_wallet_details_custom_errors
+get_wallet_details._custom_success = get_wallet_details_custom_success
+
+
+@router.post("/paystack/webhook", responses=paystack_webhook_responses)
 async def paystack_webhook(
     request: Request,
     x_paystack_signature: str = Header(None),
@@ -129,7 +160,11 @@ async def paystack_webhook(
         )
 
 
-@router.get("/deposit/{reference}/status")
+paystack_webhook._custom_errors = paystack_webhook_custom_errors
+paystack_webhook._custom_success = paystack_webhook_custom_success
+
+
+@router.get("/deposit/{reference}/status", responses=get_deposit_status_responses)
 async def get_deposit_status(
     reference: str,
     current_user: User = Depends(require_permission("read")),
@@ -166,7 +201,11 @@ async def get_deposit_status(
         )
 
 
-@router.get("/balance")
+get_deposit_status._custom_errors = get_deposit_status_custom_errors
+get_deposit_status._custom_success = get_deposit_status_custom_success
+
+
+@router.get("/balance", responses=get_balance_responses)
 async def get_balance(
     current_user: User = Depends(require_permission("read")),
     db: AsyncSession = Depends(get_db),
@@ -190,7 +229,11 @@ async def get_balance(
         )
 
 
-@router.post("/transfer")
+get_balance._custom_errors = get_balance_custom_errors
+get_balance._custom_success = get_balance_custom_success
+
+
+@router.post("/transfer", responses=transfer_funds_responses)
 async def transfer_funds(
     request: TransferRequest,
     current_user: User = Depends(require_permission("transfer")),
@@ -237,7 +280,11 @@ async def transfer_funds(
         )
 
 
-@router.get("/transactions")
+transfer_funds._custom_errors = transfer_funds_custom_errors
+transfer_funds._custom_success = transfer_funds_custom_success
+
+
+@router.get("/transactions", responses=get_transactions_responses)
 async def get_transactions(
     current_user: User = Depends(require_permission("read")),
     db: AsyncSession = Depends(get_db),
@@ -262,3 +309,7 @@ async def get_transactions(
             message="Unable to retrieve transaction history",
             error="SERVER_ERROR",
         )
+
+
+get_transactions._custom_errors = get_transactions_custom_errors
+get_transactions._custom_success = get_transactions_custom_success
