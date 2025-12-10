@@ -104,10 +104,12 @@ class WalletService:
         sender_wallet = sender_wallet_result.scalar_one_or_none()
 
         if not sender_wallet:
-            raise ValueError("Sender wallet not found")
+            raise ValueError("Your wallet was not found. Please contact support.")
 
         if sender_wallet.balance < amount:
-            raise ValueError("Insufficient balance")
+            raise ValueError(
+                f"Insufficient balance. Available: {sender_wallet.balance}, Required: {amount}"
+            )
 
         recipient_wallet_result = db.execute(
             select(Wallet).where(Wallet.wallet_number == recipient_wallet_number)
@@ -115,7 +117,9 @@ class WalletService:
         recipient_wallet = recipient_wallet_result.scalar_one_or_none()
 
         if not recipient_wallet:
-            raise LookupError("Recipient wallet not found")
+            raise LookupError(
+                f"Recipient wallet '{recipient_wallet_number}' not found. Please verify the wallet number."
+            )
 
         if sender_wallet.id == recipient_wallet.id:
             raise ValueError("Cannot transfer to your own wallet")

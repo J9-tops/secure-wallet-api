@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.db.session import get_db
@@ -47,17 +47,24 @@ def get_current_user_from_jwt(
 
     if not payload:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired JWT token",
         )
 
     user_id = payload.get("user_id")
     result = db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
+            detail="User not found",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive",
         )
 
     logger.debug(f"Authenticated user {user.id} via JWT")
@@ -72,22 +79,32 @@ def get_current_user_from_api_key(
     if not api_key_value:
         return None, None
 
+    if not api_key_value.startswith("sk_live_"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key format. API keys must start with 'sk_live_'",
+        )
+
     key_hash = hash_api_key(api_key_value)
 
-    result = db.execute(
-        select(APIKey).where(
-            and_(
-                APIKey.key_hash == key_hash,
-                APIKey.is_active,
-                APIKey.is_revoked == False,  # noqa: E712
-            )
-        )
-    )
+    result = db.execute(select(APIKey).where(APIKey.key_hash == key_hash))
     api_key = result.scalar_one_or_none()
 
     if not api_key:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key. Key not found or incorrect.",
+        )
+
+    if api_key.is_revoked:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key has been revoked. Please create a new key.",
+        )
+
+    if not api_key.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="API key is inactive"
         )
 
     now = datetime.now(timezone.utc)
@@ -98,19 +115,25 @@ def get_current_user_from_api_key(
 
     if expires_at <= now:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="API key expired"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"API key expired on {expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}. Please use /keys/rollover to create a new key.",
         )
 
     result = db.execute(select(User).where(User.id == api_key.user_id))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
+            detail="User associated with API key not found",
         )
 
-    # Update last_used_at timestamp
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive",
+        )
+
     api_key.last_used_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -130,7 +153,7 @@ def get_current_user(
 
     Supports both authentication methods:
     - JWT Bearer Token (via Authorization header)
-    - API Key (via X-API-Key header)
+    - API Key (via x-api-key header)
     """
     api_user, api_key = api_key_data
 
@@ -142,7 +165,7 @@ def get_current_user(
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required. Please provide a valid JWT token or API key.",
+        detail="Authentication required. Provide either 'Authorization: Bearer <jwt_token>' or 'x-api-key: <api_key>' header.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -176,8 +199,9 @@ def require_permission(permission: str):
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"API key does not have '{permission}' permission. "
-                f"Required: {permission}, Have: {api_key.permissions}",
+                detail=f"Permission denied. Your API key requires '{permission}' permission. "
+                f"Current permissions: {', '.join(api_key.permissions)}. "
+                f"Create a new key with the required permission.",
             )
 
         logger.debug(f"API key user {user.id} has '{permission}' permission")
