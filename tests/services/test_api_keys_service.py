@@ -1,14 +1,15 @@
 """
 Comprehensive Test Suite for Wallet Service Backend
 Tests aligned with Stage 9 project objectives
+FIXED: Updated tests to work with synchronous service methods
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from src.models.api_key_model import APIKey
 from src.models.user_model import User
@@ -31,27 +32,22 @@ class TestAPIKeyService:
 
     @pytest.fixture
     def mock_db(self):
-        """Create properly configured async mock database session"""
-        db = AsyncMock(spec=AsyncSession)
-
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
-
+        """Create properly configured mock database session"""
+        db = Mock(spec=Session)
+        db.commit = Mock()
+        db.rollback = Mock()
+        db.flush = Mock()
+        db.add = Mock()
         return db
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_success(self, api_key_service, mock_user, mock_db):
+    def test_create_api_key_success(self, api_key_service, mock_user, mock_db):
         """Test successful API key creation with valid expiry"""
-
+        # Mock the execute result for counting active keys
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
 
-        mock_db.flush = AsyncMock()
-
-        result = await api_key_service.create_api_key(
+        result = api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="test-key",
@@ -63,18 +59,18 @@ class TestAPIKeyService:
         assert len(result.api_key) >= 40
         assert result.expires_at > datetime.now(timezone.utc)
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_max_limit_reached(
+    def test_create_api_key_max_limit_reached(
         self, api_key_service, mock_user, mock_db
     ):
         """Test that maximum 5 active API keys per user is enforced"""
-
+        # Mock 5 active keys
+        mock_keys = [Mock(spec=APIKey) for _ in range(5)]
         count_result = Mock()
-        count_result.scalar.return_value = 5
+        count_result.scalars.return_value.all.return_value = mock_keys
         mock_db.execute.return_value = count_result
 
         with pytest.raises(ValueError, match="Maximum of 5 active API keys"):
-            await api_key_service.create_api_key(
+            api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
@@ -82,15 +78,11 @@ class TestAPIKeyService:
                 expiry="1D",
             )
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_expiry_formats(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_api_key_expiry_formats(self, api_key_service, mock_user, mock_db):
         """Test all valid expiry formats: 1H, 1D, 1M, 1Y"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
         expiry_tests = [
             ("1H", timedelta(hours=1)),
@@ -100,7 +92,7 @@ class TestAPIKeyService:
         ]
 
         for expiry_str, expected_delta in expiry_tests:
-            result = await api_key_service.create_api_key(
+            result = api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
@@ -112,10 +104,7 @@ class TestAPIKeyService:
             time_diff = result.expires_at - now_utc
             assert abs(time_diff - expected_delta) < timedelta(minutes=1)
 
-    @pytest.mark.asyncio
-    async def test_rollover_expired_key_success(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_rollover_expired_key_success(self, api_key_service, mock_user, mock_db):
         """Test rolling over an expired API key with same permissions"""
         expired_key = Mock(spec=APIKey)
         expired_key.id = "key123"
@@ -124,26 +113,24 @@ class TestAPIKeyService:
         expired_key.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         expired_key.is_revoked = False
 
+        # First execute returns the expired key
         key_result = Mock()
         key_result.scalar_one_or_none.return_value = expired_key
 
+        # Second execute returns count of 2 active keys
         count_result = Mock()
         count_result.scalar.return_value = 2
 
         mock_db.execute.side_effect = [key_result, count_result]
-        mock_db.flush = AsyncMock()
 
-        result = await api_key_service.rollover_api_key(
+        result = api_key_service.rollover_api_key(
             db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
         )
 
         assert result.api_key.startswith("sk_")
         assert expired_key.is_revoked is True
 
-    @pytest.mark.asyncio
-    async def test_rollover_not_expired_key_fails(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_rollover_not_expired_key_fails(self, api_key_service, mock_user, mock_db):
         """Test that rollover fails if key is not actually expired"""
         active_key = Mock(spec=APIKey)
         active_key.expires_at = datetime.now(timezone.utc) + timedelta(days=1)
@@ -154,12 +141,11 @@ class TestAPIKeyService:
         mock_db.execute.return_value = key_result
 
         with pytest.raises(ValueError, match="API key is not expired"):
-            await api_key_service.rollover_api_key(
+            api_key_service.rollover_api_key(
                 db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
             )
 
-    @pytest.mark.asyncio
-    async def test_revoke_api_key_success(self, api_key_service, mock_user, mock_db):
+    def test_revoke_api_key_success(self, api_key_service, mock_user, mock_db):
         """Test revoking an active API key"""
         active_key = Mock(spec=APIKey)
         active_key.is_revoked = False
@@ -168,15 +154,14 @@ class TestAPIKeyService:
         key_result.scalar_one_or_none.return_value = active_key
         mock_db.execute.return_value = key_result
 
-        result = await api_key_service.revoke_api_key(
+        result = api_key_service.revoke_api_key(
             db=mock_db, user=mock_user, key_id="key123"
         )
 
         assert result is True
         assert active_key.is_revoked is True
 
-    @pytest.mark.asyncio
-    async def test_revoke_already_revoked_key_fails(
+    def test_revoke_already_revoked_key_fails(
         self, api_key_service, mock_user, mock_db
     ):
         """Test that revoking an already revoked key fails"""
@@ -188,17 +173,12 @@ class TestAPIKeyService:
         mock_db.execute.return_value = key_result
 
         with pytest.raises(ValueError, match="already revoked"):
-            await api_key_service.revoke_api_key(
-                db=mock_db, user=mock_user, key_id="key123"
-            )
+            api_key_service.revoke_api_key(db=mock_db, user=mock_user, key_id="key123")
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_invalid_expiry(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_api_key_invalid_expiry(self, api_key_service, mock_user, mock_db):
         """Test that invalid expiry format raises error"""
         with pytest.raises(ValueError):
-            await api_key_service.create_api_key(
+            api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
@@ -223,27 +203,22 @@ class TestAPIKeyPermissions:
 
     @pytest.fixture
     def mock_db(self):
-        """Create properly configured async mock database session"""
-        db = AsyncMock(spec=AsyncSession)
-
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
-
+        """Create properly configured mock database session"""
+        db = Mock(spec=Session)
+        db.commit = Mock()
+        db.flush = Mock()
+        db.add = Mock()
         return db
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_with_deposit_permission(
+    def test_create_api_key_with_deposit_permission(
         self, api_key_service, mock_user, mock_db
     ):
         """Test creating API key with only deposit permission"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        result = await api_key_service.create_api_key(
+        result = api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="deposit-only-key",
@@ -256,17 +231,15 @@ class TestAPIKeyPermissions:
         added_key = call_args[0][0]
         assert added_key.permissions == ["deposit"]
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_with_transfer_permission(
+    def test_create_api_key_with_transfer_permission(
         self, api_key_service, mock_user, mock_db
     ):
         """Test creating API key with only transfer permission"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        await api_key_service.create_api_key(
+        api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="transfer-only-key",
@@ -278,17 +251,15 @@ class TestAPIKeyPermissions:
         added_key = call_args[0][0]
         assert added_key.permissions == ["transfer"]
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_with_read_permission(
+    def test_create_api_key_with_read_permission(
         self, api_key_service, mock_user, mock_db
     ):
         """Test creating API key with only read permission"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        await api_key_service.create_api_key(
+        api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="read-only-key",
@@ -300,17 +271,15 @@ class TestAPIKeyPermissions:
         added_key = call_args[0][0]
         assert added_key.permissions == ["read"]
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_with_multiple_permissions(
+    def test_create_api_key_with_multiple_permissions(
         self, api_key_service, mock_user, mock_db
     ):
         """Test creating API key with multiple permissions"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        await api_key_service.create_api_key(
+        api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="full-access-key",
@@ -322,17 +291,15 @@ class TestAPIKeyPermissions:
         added_key = call_args[0][0]
         assert set(added_key.permissions) == {"deposit", "transfer", "read"}
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_with_empty_permissions(
+    def test_create_api_key_with_empty_permissions(
         self, api_key_service, mock_user, mock_db
     ):
         """Test creating API key with empty permissions list"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        await api_key_service.create_api_key(
+        api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="no-permission-key",
@@ -344,10 +311,7 @@ class TestAPIKeyPermissions:
         added_key = call_args[0][0]
         assert added_key.permissions == []
 
-    @pytest.mark.asyncio
-    async def test_rollover_preserves_permissions(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_rollover_preserves_permissions(self, api_key_service, mock_user, mock_db):
         """Test that rollover creates new key with exact same permissions"""
         expired_key = Mock(spec=APIKey)
         expired_key.id = "key123"
@@ -363,9 +327,8 @@ class TestAPIKeyPermissions:
         count_result.scalar.return_value = 2
 
         mock_db.execute.side_effect = [key_result, count_result]
-        mock_db.flush = AsyncMock()
 
-        await api_key_service.rollover_api_key(
+        api_key_service.rollover_api_key(
             db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
         )
 
@@ -373,17 +336,15 @@ class TestAPIKeyPermissions:
         new_key = call_args[0][0]
         assert new_key.permissions == ["deposit", "read"]
 
-    @pytest.mark.asyncio
-    async def test_create_api_key_with_invalid_permissions(
+    def test_create_api_key_with_invalid_permissions(
         self, api_key_service, mock_user, mock_db
     ):
         """Test creating API key with invalid permission names (should still work - validation happens at endpoint level)"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        await api_key_service.create_api_key(
+        api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="invalid-permission-key",
@@ -455,12 +416,6 @@ class TestAPIKeyValidation:
         )
 
 
-"""
-Tests for API Key Edge Cases
-Tests concurrent operations, key limits, and edge scenarios
-"""
-
-
 class TestAPIKeyLimits:
     """Test API key limit enforcement"""
 
@@ -477,24 +432,20 @@ class TestAPIKeyLimits:
 
     @pytest.fixture
     def mock_db(self):
-        db = AsyncMock(spec=AsyncSession)
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
+        db = Mock(spec=Session)
+        db.commit = Mock()
+        db.flush = Mock()
+        db.add = Mock()
         return db
 
-    @pytest.mark.asyncio
-    async def test_create_key_at_limit_minus_one(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_key_at_limit_minus_one(self, api_key_service, mock_user, mock_db):
         """Test creating API key when at 4 keys (one below limit)"""
+        mock_keys = [Mock(spec=APIKey) for _ in range(4)]
         count_result = Mock()
-        count_result.scalar.return_value = 4
+        count_result.scalars.return_value.all.return_value = mock_keys
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
-        result = await api_key_service.create_api_key(
+        result = api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="5th-key",
@@ -504,15 +455,15 @@ class TestAPIKeyLimits:
 
         assert result.api_key.startswith("sk_")
 
-    @pytest.mark.asyncio
-    async def test_create_key_exceeds_limit(self, api_key_service, mock_user, mock_db):
+    def test_create_key_exceeds_limit(self, api_key_service, mock_user, mock_db):
         """Test creating API key when already at 5 keys fails"""
+        mock_keys = [Mock(spec=APIKey) for _ in range(5)]
         count_result = Mock()
-        count_result.scalar.return_value = 5
+        count_result.scalars.return_value.all.return_value = mock_keys
         mock_db.execute.return_value = count_result
 
         with pytest.raises(ValueError, match="Maximum of 5 active API keys"):
-            await api_key_service.create_api_key(
+            api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="6th-key",
@@ -520,8 +471,7 @@ class TestAPIKeyLimits:
                 expiry="1D",
             )
 
-    @pytest.mark.asyncio
-    async def test_rollover_at_limit_fails(self, api_key_service, mock_user, mock_db):
+    def test_rollover_at_limit_fails(self, api_key_service, mock_user, mock_db):
         """Test rollover fails when already at 5 active keys"""
         expired_key = Mock(spec=APIKey)
         expired_key.id = "key123"
@@ -539,7 +489,7 @@ class TestAPIKeyLimits:
         mock_db.execute.side_effect = [key_result, count_result]
 
         with pytest.raises(ValueError, match="Maximum of 5 active API keys"):
-            await api_key_service.rollover_api_key(
+            api_key_service.rollover_api_key(
                 db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
             )
 
@@ -560,26 +510,22 @@ class TestAPIKeyCollisions:
 
     @pytest.fixture
     def mock_db(self):
-        db = AsyncMock(spec=AsyncSession)
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
+        db = Mock(spec=Session)
+        db.commit = Mock()
+        db.rollback = Mock()
+        db.add = Mock()
         return db
 
-    @pytest.mark.asyncio
-    async def test_create_key_retry_on_collision(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_key_retry_on_collision(self, api_key_service, mock_user, mock_db):
         """Test API key creation retries on collision"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
 
-        mock_db.flush = AsyncMock(side_effect=[IntegrityError("", "", ""), None])
-        mock_db.rollback = AsyncMock()
+        # First flush raises IntegrityError, second succeeds
+        mock_db.flush.side_effect = [IntegrityError("", "", ""), None]
 
-        result = await api_key_service.create_api_key(
+        result = api_key_service.create_api_key(
             db=mock_db,
             user=mock_user,
             name="test-key",
@@ -590,23 +536,19 @@ class TestAPIKeyCollisions:
         assert result.api_key.startswith("sk_")
         assert mock_db.rollback.call_count == 1
 
-    @pytest.mark.asyncio
-    async def test_create_key_max_retries_exceeded(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_key_max_retries_exceeded(self, api_key_service, mock_user, mock_db):
         """Test API key creation fails after max retries"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
 
-        mock_db.flush = AsyncMock(
-            side_effect=[IntegrityError("", "", "")]
-            * api_key_service.MAX_RETRY_ATTEMPTS
-        )
-        mock_db.rollback = AsyncMock()
+        # All flush attempts raise IntegrityError
+        mock_db.flush.side_effect = [
+            IntegrityError("", "", "")
+        ] * api_key_service.MAX_RETRY_ATTEMPTS
 
         with pytest.raises(ValueError, match="Failed to generate unique API key"):
-            await api_key_service.create_api_key(
+            api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
@@ -614,10 +556,7 @@ class TestAPIKeyCollisions:
                 expiry="1D",
             )
 
-    @pytest.mark.asyncio
-    async def test_rollover_retry_on_collision(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_rollover_retry_on_collision(self, api_key_service, mock_user, mock_db):
         """Test rollover retries on collision"""
         expired_key = Mock(spec=APIKey)
         expired_key.id = "key123"
@@ -633,11 +572,9 @@ class TestAPIKeyCollisions:
         count_result.scalar.return_value = 2
 
         mock_db.execute.side_effect = [key_result, count_result]
+        mock_db.flush.side_effect = [IntegrityError("", "", ""), None]
 
-        mock_db.flush = AsyncMock(side_effect=[IntegrityError("", "", ""), None])
-        mock_db.rollback = AsyncMock()
-
-        result = await api_key_service.rollover_api_key(
+        result = api_key_service.rollover_api_key(
             db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
         )
 
@@ -661,49 +598,42 @@ class TestAPIKeyNotFound:
 
     @pytest.fixture
     def mock_db(self):
-        db = AsyncMock(spec=AsyncSession)
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
+        db = Mock(spec=Session)
         return db
 
-    @pytest.mark.asyncio
-    async def test_rollover_nonexistent_key(self, api_key_service, mock_user, mock_db):
+    def test_rollover_nonexistent_key(self, api_key_service, mock_user, mock_db):
         """Test rollover fails for non-existent key"""
         result_mock = Mock()
         result_mock.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = result_mock
 
         with pytest.raises(LookupError, match="API key not found"):
-            await api_key_service.rollover_api_key(
+            api_key_service.rollover_api_key(
                 db=mock_db,
                 user=mock_user,
                 expired_key_id="nonexistent_key",
                 new_expiry="1M",
             )
 
-    @pytest.mark.asyncio
-    async def test_revoke_nonexistent_key(self, api_key_service, mock_user, mock_db):
+    def test_revoke_nonexistent_key(self, api_key_service, mock_user, mock_db):
         """Test revoke fails for non-existent key"""
         result_mock = Mock()
         result_mock.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = result_mock
 
         with pytest.raises(LookupError, match="API key not found"):
-            await api_key_service.revoke_api_key(
+            api_key_service.revoke_api_key(
                 db=mock_db, user=mock_user, key_id="nonexistent_key"
             )
 
-    @pytest.mark.asyncio
-    async def test_rollover_wrong_user_key(self, api_key_service, mock_user, mock_db):
+    def test_rollover_wrong_user_key(self, api_key_service, mock_user, mock_db):
         """Test rollover fails when key belongs to different user"""
         result_mock = Mock()
         result_mock.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = result_mock
 
         with pytest.raises(LookupError, match="API key not found"):
-            await api_key_service.rollover_api_key(
+            api_key_service.rollover_api_key(
                 db=mock_db,
                 user=mock_user,
                 expired_key_id="other_user_key",
@@ -727,15 +657,13 @@ class TestAPIKeyExpiry:
 
     @pytest.fixture
     def mock_db(self):
-        db = AsyncMock(spec=AsyncSession)
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
+        db = Mock(spec=Session)
+        db.commit = Mock()
+        db.flush = Mock()
+        db.add = Mock()
         return db
 
-    @pytest.mark.asyncio
-    async def test_rollover_just_expired_key(self, api_key_service, mock_user, mock_db):
+    def test_rollover_just_expired_key(self, api_key_service, mock_user, mock_db):
         """Test rollover works for key that just expired"""
         expired_key = Mock(spec=APIKey)
         expired_key.id = "key123"
@@ -751,16 +679,14 @@ class TestAPIKeyExpiry:
         count_result.scalar.return_value = 2
 
         mock_db.execute.side_effect = [key_result, count_result]
-        mock_db.flush = AsyncMock()
 
-        result = await api_key_service.rollover_api_key(
+        result = api_key_service.rollover_api_key(
             db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
         )
 
         assert result.api_key.startswith("sk_")
 
-    @pytest.mark.asyncio
-    async def test_rollover_almost_expired_key_fails(
+    def test_rollover_almost_expired_key_fails(
         self, api_key_service, mock_user, mock_db
     ):
         """Test rollover fails for key that's almost expired but not yet"""
@@ -775,14 +701,11 @@ class TestAPIKeyExpiry:
         mock_db.execute.return_value = key_result
 
         with pytest.raises(ValueError, match="API key is not expired"):
-            await api_key_service.rollover_api_key(
+            api_key_service.rollover_api_key(
                 db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
             )
 
-    @pytest.mark.asyncio
-    async def test_rollover_revoked_key_fails(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_rollover_revoked_key_fails(self, api_key_service, mock_user, mock_db):
         """Test rollover fails for already revoked key"""
         revoked_key = Mock(spec=APIKey)
         revoked_key.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
@@ -793,7 +716,7 @@ class TestAPIKeyExpiry:
         mock_db.execute.return_value = key_result
 
         with pytest.raises(ValueError, match="already been revoked"):
-            await api_key_service.rollover_api_key(
+            api_key_service.rollover_api_key(
                 db=mock_db, user=mock_user, expired_key_id="key123", new_expiry="1M"
             )
 
@@ -814,25 +737,20 @@ class TestAPIKeyExpiryFormats:
 
     @pytest.fixture
     def mock_db(self):
-        db = AsyncMock(spec=AsyncSession)
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=async_context)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        db.begin.return_value = async_context
+        db = Mock(spec=Session)
+        db.commit = Mock()
+        db.flush = Mock()
+        db.add = Mock()
         return db
 
-    @pytest.mark.asyncio
-    async def test_create_key_lowercase_expiry(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_key_lowercase_expiry(self, api_key_service, mock_user, mock_db):
         """Test expiry format is case-insensitive (if implemented)"""
         count_result = Mock()
-        count_result.scalar.return_value = 0
+        count_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = count_result
-        mock_db.flush = AsyncMock()
 
         try:
-            result = await api_key_service.create_api_key(
+            result = api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
@@ -843,13 +761,12 @@ class TestAPIKeyExpiryFormats:
         except ValueError:
             pass
 
-    @pytest.mark.asyncio
-    async def test_create_key_invalid_expiry_format(
+    def test_create_key_invalid_expiry_format(
         self, api_key_service, mock_user, mock_db
     ):
         """Test invalid expiry format raises error"""
         with pytest.raises(ValueError):
-            await api_key_service.create_api_key(
+            api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
@@ -857,13 +774,10 @@ class TestAPIKeyExpiryFormats:
                 expiry="INVALID",
             )
 
-    @pytest.mark.asyncio
-    async def test_create_key_missing_expiry_unit(
-        self, api_key_service, mock_user, mock_db
-    ):
+    def test_create_key_missing_expiry_unit(self, api_key_service, mock_user, mock_db):
         """Test expiry without unit raises error"""
         with pytest.raises(ValueError):
-            await api_key_service.create_api_key(
+            api_key_service.create_api_key(
                 db=mock_db,
                 user=mock_user,
                 name="test-key",
