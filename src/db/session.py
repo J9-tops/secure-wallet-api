@@ -15,6 +15,7 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:password@localhost:5432/wallet_service",
 )
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
 
 if DATABASE_URL.startswith("postgresql://"):
@@ -26,7 +27,7 @@ DB_ROOT_URL = DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
 
 engine = create_engine(
     DATABASE_URL,
-    echo=True,
+    echo=DEBUG,
     future=True,
     pool_pre_ping=True,
 )
