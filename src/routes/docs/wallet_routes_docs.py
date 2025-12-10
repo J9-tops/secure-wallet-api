@@ -47,13 +47,26 @@ initiate_deposit_responses = {
                             "errors": {},
                         },
                     },
-                    "insufficient_permissions": {
-                        "summary": "Insufficient Permissions",
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Forbidden - Insufficient Permission",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "missing_deposit_permission": {
+                        "summary": "Missing Deposit Permission",
                         "value": {
-                            "error": "UNAUTHORIZED",
-                            "message": "Insufficient permissions",
-                            "status_code": 401,
-                            "errors": {"details": ["Requires 'deposit' permission"]},
+                            "error": "FORBIDDEN",
+                            "message": "Permission denied. Requires 'deposit' permission.",
+                            "status_code": 403,
+                            "errors": {
+                                "details": [
+                                    "Permission denied. Your API key requires 'deposit' permission. Current permissions: read, transfer. Create a new key with the required permission."
+                                ]
+                            },
                         },
                     },
                 }
@@ -119,13 +132,26 @@ get_wallet_details_responses = {
                             "errors": {},
                         },
                     },
-                    "insufficient_permissions": {
-                        "summary": "Insufficient Permissions",
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Forbidden - Insufficient Permission",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "missing_read_permission": {
+                        "summary": "Missing Read Permission",
                         "value": {
-                            "error": "UNAUTHORIZED",
-                            "message": "Insufficient permissions",
-                            "status_code": 401,
-                            "errors": {"details": ["Requires 'read' permission"]},
+                            "error": "FORBIDDEN",
+                            "message": "Permission denied. Requires 'read' permission.",
+                            "status_code": 403,
+                            "errors": {
+                                "details": [
+                                    "Permission denied. Your API key requires 'read' permission. Current permissions: transfer. Create a new key with the required permission."
+                                ]
+                            },
                         },
                     },
                 }
@@ -257,13 +283,26 @@ get_deposit_status_responses = {
                             "errors": {},
                         },
                     },
-                    "insufficient_permissions": {
-                        "summary": "Insufficient Permissions",
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Forbidden - Insufficient Permission",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "missing_read_permission": {
+                        "summary": "Missing Read Permission",
                         "value": {
-                            "error": "UNAUTHORIZED",
-                            "message": "Insufficient permissions",
-                            "status_code": 401,
-                            "errors": {"details": ["Requires 'read' permission"]},
+                            "error": "FORBIDDEN",
+                            "message": "Permission denied. Requires 'read' permission.",
+                            "status_code": 403,
+                            "errors": {
+                                "details": [
+                                    "Permission denied. Your API key requires 'read' permission. Current permissions: transfer, deposit. Create a new key with the required permission."
+                                ]
+                            },
                         },
                     },
                 }
@@ -342,13 +381,26 @@ get_balance_responses = {
                             "errors": {},
                         },
                     },
-                    "insufficient_permissions": {
-                        "summary": "Insufficient Permissions",
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Forbidden - Insufficient Permission",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "missing_read_permission": {
+                        "summary": "Missing Read Permission",
                         "value": {
-                            "error": "UNAUTHORIZED",
-                            "message": "Insufficient permissions",
-                            "status_code": 401,
-                            "errors": {"details": ["Requires 'read' permission"]},
+                            "error": "FORBIDDEN",
+                            "message": "Permission denied. Requires 'read' permission.",
+                            "status_code": 403,
+                            "errors": {
+                                "details": [
+                                    "Permission denied. Your API key requires 'read' permission. Current permissions: transfer, deposit. Create a new key with the required permission."
+                                ]
+                            },
                         },
                     },
                 }
@@ -453,13 +505,26 @@ transfer_funds_responses = {
                             "errors": {},
                         },
                     },
-                    "insufficient_permissions": {
-                        "summary": "Insufficient Permissions",
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Forbidden - Insufficient Permission",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "missing_transfer_permission": {
+                        "summary": "Missing transfer Permission",
                         "value": {
-                            "error": "UNAUTHORIZED",
-                            "message": "Insufficient permissions",
-                            "status_code": 401,
-                            "errors": {"details": ["Requires 'transfer' permission"]},
+                            "error": "FORBIDDEN",
+                            "message": "Permission denied. Requires 'transfer' permission.",
+                            "status_code": 403,
+                            "errors": {
+                                "details": [
+                                    "Permission denied. Your API key requires 'transfer' permission. Current permissions: read, deposit. Create a new key with the required permission."
+                                ]
+                            },
                         },
                     },
                 }
@@ -557,13 +622,26 @@ get_transactions_responses = {
                             "errors": {},
                         },
                     },
-                    "insufficient_permissions": {
-                        "summary": "Insufficient Permissions",
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Forbidden - Insufficient Permission",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "missing_read_permission": {
+                        "summary": "Missing read Permission",
                         "value": {
-                            "error": "UNAUTHORIZED",
-                            "message": "Insufficient permissions",
-                            "status_code": 401,
-                            "errors": {"details": ["Requires 'read' permission"]},
+                            "error": "FORBIDDEN",
+                            "message": "Permission denied. Requires 'read' permission.",
+                            "status_code": 403,
+                            "errors": {
+                                "details": [
+                                    "Permission denied. Your API key requires 'read' permission. Current permissions: transfer, deposit. Create a new key with the required permission."
+                                ]
+                            },
                         },
                     },
                 }
