@@ -27,7 +27,7 @@ bearer_scheme = HTTPBearer(
 )
 
 api_key_scheme = APIKeyHeader(
-    name="X-API-Key",
+    name="x-api-key",
     auto_error=False,
     scheme_name="API Key",
     description="Enter your API key (format: sk_live_...)",
