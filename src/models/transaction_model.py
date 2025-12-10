@@ -36,7 +36,7 @@ class Transaction(Base):
         SQLEnum(TransactionStatus), default=TransactionStatus.PENDING, nullable=False
     )
 
-    recipient_wallet_number = Column(String(13), nullable=True)
+    recipient_wallet_number = Column(String(15), nullable=True)
     recipient_user_id = Column(String, nullable=True)
 
     paystack_reference = Column(String, nullable=True)
