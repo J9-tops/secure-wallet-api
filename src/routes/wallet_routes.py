@@ -34,11 +34,7 @@ async def initiate_deposit(
             db=db, user=current_user, amount=request.amount
         )
 
-        return success_response(
-            status_code=status.HTTP_200_OK,
-            message="Deposit initiated successfully",
-            data=result,
-        )
+        return result
 
     except ValueError as e:
         logger.warning(f"Invalid deposit request from user {current_user.id}: {str(e)}")
@@ -56,6 +52,37 @@ async def initiate_deposit(
         return error_response(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message="Unable to process deposit. Please try again",
+            error="SERVER_ERROR",
+        )
+
+
+@router.get("/details")
+async def get_wallet_details(
+    current_user: User = Depends(require_permission("read")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get complete wallet details including wallet number
+    Requires: JWT or API key with 'read' permission
+    """
+    try:
+        wallet = wallet_service.get_or_create_wallet(db=db, user=current_user)
+
+        return {
+            "wallet_number": wallet.wallet_number,
+            "balance": wallet.balance,
+            "created_at": wallet.created_at,
+            "updated_at": wallet.updated_at,
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get wallet details for user {current_user.id}: {str(e)}",
+            exc_info=True,
+        )
+        return error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message="Unable to retrieve wallet details",
             error="SERVER_ERROR",
         )
 

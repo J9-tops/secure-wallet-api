@@ -19,7 +19,7 @@ class DepositResponse(BaseModel):
 
 
 class TransferRequest(BaseModel):
-    wallet_number: str = Field(..., min_length=13, max_length=13)
+    wallet_number: str = Field(..., min_length=13, max_length=15)
     amount: Decimal = Field(..., gt=0, decimal_places=2)
 
 
